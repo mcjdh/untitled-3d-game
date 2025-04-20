@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Simple 3D Walking Simulator</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    #blocker {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #instructions {
+      font-family: Arial, sans-serif;
+      font-size: 24px;
+      color: white;
+      text-align: center;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="blocker">
+    <div id="instructions">
+      Click to Play<br>
+      (W/A/S/D: Move, Space: Jump, Mouse: Look)
+    </div>
+  </div>
+  <script type="module">
+    import * as THREE from 'https://esm.sh/three@0.128.0';
+    import { PointerLockControls } from 'https://esm.sh/three@0.128.0/examples/jsm/controls/PointerLockControls.js';
+
+    let camera, scene, renderer, controls;
+    let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+    let canJump = false;
+    let velocity = new THREE.Vector3();
+    let direction = new THREE.Vector3();
+    let prevTime = performance.now();
+
+    init();
+    animate();
+
+    function init() {
+      camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 1, 2000);
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xa0a0a0);
+
+      // Hemisphere light for ambient illumination
+      const light = new THREE.HemisphereLight(0xffffff, 0x444444);
+      light.position.set(0, 200, 0);
+      scene.add(light);
+
+      // Grid Helper for a simple grid world
+      const grid = new THREE.GridHelper(2000, 40, 0x000000, 0x000000);
+      grid.material.opacity = 0.2;
+      grid.material.transparent = true;
+      scene.add(grid);
+
+      // Pointer Lock Controls for first-person movement
+      controls = new PointerLockControls(camera, document.body);
+      scene.add(controls.getObject());
+
+      const blocker = document.getElementById('blocker');
+      const instructions = document.getElementById('instructions');
+      
+      instructions.addEventListener('click', function() {
+        controls.lock();
+      }, false);
+
+      controls.addEventListener('lock', function() {
+        blocker.style.display = 'none';
+      });
+
+      controls.addEventListener('unlock', function() {
+        blocker.style.display = 'flex';
+      });
+
+      // Keyboard event listeners
+      const onKeyDown = function(event) {
+        switch(event.code) {
+          case 'ArrowUp':
+          case 'KeyW':
+            moveForward = true;
+            break;
+          case 'ArrowLeft':
+          case 'KeyA':
+            moveLeft = true;
+            break;
+          case 'ArrowDown':
+          case 'KeyS':
+            moveBackward = true;
+            break;
+          case 'ArrowRight':
+          case 'KeyD':
+            moveRight = true;
+            break;
+          case 'Space':
+            if (canJump === true) velocity.y += 350;
+            canJump = false;
+            break;
+        }
+      };
+
+      const onKeyUp = function(event) {
+        switch(event.code) {
+          case 'ArrowUp':
+          case 'KeyW':
+            moveForward = false;
+            break;
+          case 'ArrowLeft':
+          case 'KeyA':
+            moveLeft = false;
+            break;
+          case 'ArrowDown':
+          case 'KeyS':
+            moveBackward = false;
+            break;
+          case 'ArrowRight':
+          case 'KeyD':
+            moveRight = false;
+            break;
+        }
+      };
+
+      document.addEventListener('keydown', onKeyDown, false);
+      document.addEventListener('keyup', onKeyUp, false);
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      window.addEventListener('resize', onWindowResize, false);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const time = performance.now();
+      const delta = (time - prevTime) / 1000;
+
+      // Damping for horizontal movement
+      velocity.x -= velocity.x * 10.0 * delta;
+      velocity.z -= velocity.z * 10.0 * delta;
+      // Gravity: apply only if above ground or moving upward
+      if (controls.getObject().position.y > 10 || velocity.y > 0) {
+          velocity.y -= 9.8 * 100.0 * delta;
+      } else {
+          velocity.y = 0;
+      }
+
+      // Calculate movement direction
+      direction.z = Number(moveForward) - Number(moveBackward);
+      direction.x = Number(moveLeft) - Number(moveRight);
+      direction.normalize();
+      
+      if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta;
+      if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta;
+
+      // Clamp horizontal velocities to zero if no input is active to prevent drift
+      if (!moveForward && !moveBackward && Math.abs(velocity.z) < 0.1) velocity.z = 0;
+      if (!moveLeft && !moveRight && Math.abs(velocity.x) < 0.1) velocity.x = 0;
+
+      controls.getObject().translateX(velocity.x * delta);
+      controls.getObject().translateY(velocity.y * delta);
+      controls.getObject().translateZ(velocity.z * delta);
+
+      // Prevent falling below ground level (assume ground at y=10)
+      if (controls.getObject().position.y < 10) {
+        velocity.y = 0;
+        controls.getObject().position.y = 10;
+        canJump = true;
+      }
+
+      renderer.render(scene, camera);
+      prevTime = time;
+    }
+  </script>
+</body>
+</html> 
