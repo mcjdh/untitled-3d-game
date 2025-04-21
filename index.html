@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Simple 3D Walking Simulator</title>
+  <title>Redirect Portal - 3D Walking Simulator</title>
   <style>
     body {
       margin: 0;
@@ -24,18 +24,32 @@
       text-align: center;
       cursor: pointer;
     }
+    #worldInfo {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-family: Arial, sans-serif;
+      font-size: 16px;
+      color: white;
+      background-color: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      border-radius: 5px;
+    }
   </style>
 </head>
 <body>
   <div id="blocker">
     <div id="instructions">
+      Redirect Portal<br>
       Click to Play<br>
       (W/A/S/D: Move, Space: Jump, Mouse: Look)
     </div>
   </div>
+  <div id="worldInfo">Current World: Default</div>
   <script type="module">
     import * as THREE from 'https://esm.sh/three@0.128.0';
     import { PointerLockControls } from 'https://esm.sh/three@0.128.0/examples/jsm/controls/PointerLockControls.js';
+    import worlds from './worlds/index.js';
 
     let camera, scene, renderer, controls;
     let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -43,151 +57,1025 @@
     let velocity = new THREE.Vector3();
     let direction = new THREE.Vector3();
     let prevTime = performance.now();
+    
+    // Enhanced state management
+    const gameState = {
+        isLoading: false,
+        currentWorld: "default",
+        lastUpdateTime: 0,
+        debugMode: false,
+        stats: {
+            fps: 0,
+            frameTime: 0,
+            worldChanges: 0
+        }
+    };
+    
+    // Configuration
+    const CONFIG = {
+        player: {
+            height: 10,
+            speed: 400.0,
+            jumpForce: 350,
+            mouseSensitivity: 1.0
+        },
+        physics: {
+            gravity: 9.8 * 100.0,
+            dampingFactor: 10.0,
+            minVelocity: 0.01
+        },
+        portal: {
+            radius: 10,
+            cooldownTime: 1000,
+            transitionTime: 500
+        }
+    };
+
+    // Resource management
+    const resources = {
+        geometries: new Map(),
+        materials: new Map(),
+        textures: new Map(),
+        dispose: function() {
+            this.geometries.forEach(geometry => geometry.dispose());
+            this.materials.forEach(material => material.dispose());
+            this.textures.forEach(texture => texture.dispose());
+            this.geometries.clear();
+            this.materials.clear();
+            this.textures.clear();
+        }
+    };
+
+    // Portal and world variables
+    const portals = [];
+    let particleSystems = [];
+    let portalCooldown = false;
 
     init();
     animate();
 
     function init() {
-      camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 1, 2000);
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(0xa0a0a0);
-
-      // Hemisphere light for ambient illumination
-      const light = new THREE.HemisphereLight(0xffffff, 0x444444);
-      light.position.set(0, 200, 0);
-      scene.add(light);
-
-      // Grid Helper for a simple grid world
-      const grid = new THREE.GridHelper(2000, 40, 0x000000, 0x000000);
-      grid.material.opacity = 0.2;
-      grid.material.transparent = true;
-      scene.add(grid);
-
-      // Pointer Lock Controls for first-person movement
-      controls = new PointerLockControls(camera, document.body);
-      scene.add(controls.getObject());
-
-      const blocker = document.getElementById('blocker');
-      const instructions = document.getElementById('instructions');
-      
-      instructions.addEventListener('click', function() {
-        controls.lock();
-      }, false);
-
-      controls.addEventListener('lock', function() {
-        blocker.style.display = 'none';
-      });
-
-      controls.addEventListener('unlock', function() {
-        blocker.style.display = 'flex';
-      });
-
-      // Keyboard event listeners
-      const onKeyDown = function(event) {
-        switch(event.code) {
-          case 'ArrowUp':
-          case 'KeyW':
-            moveForward = true;
-            break;
-          case 'ArrowLeft':
-          case 'KeyA':
-            moveLeft = true;
-            break;
-          case 'ArrowDown':
-          case 'KeyS':
-            moveBackward = true;
-            break;
-          case 'ArrowRight':
-          case 'KeyD':
-            moveRight = true;
-            break;
-          case 'Space':
-            if (canJump === true) velocity.y += 350;
-            canJump = false;
-            break;
+        try {
+            initRenderer();
+            initScene();
+            initControls();
+            initEventListeners();
+            loadWorld(gameState.currentWorld);
+        } catch (error) {
+            console.error('Initialization error:', error);
+            showErrorScreen('Failed to initialize game. Please refresh the page.');
         }
-      };
-
-      const onKeyUp = function(event) {
-        switch(event.code) {
-          case 'ArrowUp':
-          case 'KeyW':
-            moveForward = false;
-            break;
-          case 'ArrowLeft':
-          case 'KeyA':
-            moveLeft = false;
-            break;
-          case 'ArrowDown':
-          case 'KeyS':
-            moveBackward = false;
-            break;
-          case 'ArrowRight':
-          case 'KeyD':
-            moveRight = false;
-            break;
-        }
-      };
-
-      document.addEventListener('keydown', onKeyDown, false);
-      document.addEventListener('keyup', onKeyUp, false);
-
-      // Renderer
-      renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
-
-      window.addEventListener('resize', onWindowResize, false);
     }
 
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+    function initRenderer() {
+        renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            powerPreference: "high-performance"
+        });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+    }
+
+    function initScene() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 1, 2000);
+    }
+
+    function initControls() {
+        controls = new PointerLockControls(camera, document.body);
+        controls.getObject().position.y = CONFIG.player.height;
+        scene.add(controls.getObject());
+
+        const blocker = document.getElementById('blocker');
+        const instructions = document.getElementById('instructions');
+        
+        instructions.addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', () => blocker.style.display = 'none');
+        controls.addEventListener('unlock', () => blocker.style.display = 'flex');
+    }
+
+    function initEventListeners() {
+        document.addEventListener('keydown', onKeyDown, false);
+        document.addEventListener('keyup', onKeyUp, false);
+        window.addEventListener('resize', onWindowResize, false);
+    }
+
+    function loadWorld(worldKey) {
+        if (gameState.isLoading) return;
+        gameState.isLoading = true;
+
+        try {
+            if (!worlds[worldKey]) {
+                console.error(`World "${worldKey}" not found, falling back to default`);
+                worldKey = 'default';
+                if (!worlds[worldKey]) {
+                    throw new Error('Default world configuration missing');
+                }
+            }
+
+            // Show loading screen
+            showLoadingScreen(worldKey);
+
+            // Clean up old world
+            cleanupWorld();
+
+            // Load new world
+            const world = worlds[worldKey];
+            gameState.currentWorld = worldKey;
+            
+            // Update UI
+            document.getElementById('worldInfo').textContent = `Current World: ${world.name}`;
+            
+            // Setup new world
+            setupWorldEnvironment(world);
+            setupWorldLighting(world);
+            setupWorldObjects(world);
+            setupParticleSystems(world);
+            
+            // Add player back to scene
+            scene.add(controls.getObject());
+            
+            gameState.stats.worldChanges++;
+            
+        } catch (error) {
+            console.error('Error loading world:', error);
+            showErrorScreen('Failed to load world. Returning to default world...');
+            setTimeout(() => loadWorld('default'), 2000);
+        } finally {
+            gameState.isLoading = false;
+            hideLoadingScreen();
+        }
+    }
+
+    function cleanupWorld() {
+        // Remove controls from scene to prevent deletion
+        scene.remove(controls.getObject());
+        
+        // Dispose of all resources
+        scene.traverse(object => {
+            if (object.geometry) object.geometry.dispose();
+            if (object.material) {
+                if (Array.isArray(object.material)) {
+                    object.material.forEach(material => material.dispose());
+                } else {
+                    object.material.dispose();
+                }
+            }
+        });
+        
+        // Clear scene
+        while(scene.children.length > 0) {
+            scene.remove(scene.children[0]);
+        }
+        
+        // Clean up particle systems
+        particleSystems.forEach(system => {
+            if (system.particles) {
+                system.particles.geometry.dispose();
+                system.particles.material.dispose();
+                scene.remove(system.particles);
+            }
+        });
+        
+        particleSystems = [];
+        portals.length = 0;
+        
+        // Clean up resources
+        resources.dispose();
+    }
+
+    function setupWorldEnvironment(world) {
+        scene.background = new THREE.Color(world.background);
+        
+        if (world.fog) {
+            scene.fog = new THREE.Fog(world.fog.color, world.fog.near, world.fog.far);
+        }
+    }
+
+    function setupWorldLighting(world) {
+        const ambient = world.ambient || { skyColor: 0xffffff, groundColor: 0x444444 };
+        const light = new THREE.HemisphereLight(ambient.skyColor, ambient.groundColor);
+        light.position.set(0, 200, 0);
+        scene.add(light);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(100, 100, 50);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
     }
 
     function animate() {
-      requestAnimationFrame(animate);
+        requestAnimationFrame(animate);
 
-      const time = performance.now();
-      const delta = (time - prevTime) / 1000;
+        const time = performance.now();
+        const delta = Math.min((time - prevTime) / 1000, 0.1); // Cap delta time
 
-      // Damping for horizontal movement
-      velocity.x -= velocity.x * 10.0 * delta;
-      velocity.z -= velocity.z * 10.0 * delta;
-      // Gravity: apply only if above ground or moving upward
-      if (controls.getObject().position.y > 10 || velocity.y > 0) {
-          velocity.y -= 9.8 * 100.0 * delta;
-      } else {
-          velocity.y = 0;
-      }
+        updatePhysics(delta);
+        updateParticles(delta);
+        updatePortalLabels();
+        checkPortalCollisions();
+        
+        // Update stats
+        gameState.stats.frameTime = time - prevTime;
+        gameState.stats.fps = 1000 / gameState.stats.frameTime;
+        
+        renderer.render(scene, camera);
+        prevTime = time;
+    }
 
-      // Calculate movement direction
-      direction.z = Number(moveForward) - Number(moveBackward);
-      direction.x = Number(moveLeft) - Number(moveRight);
-      direction.normalize();
-      
-      if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta;
-      if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta;
+    function updatePhysics(delta) {
+        // Apply damping
+        const dampingFactor = Math.exp(-CONFIG.physics.dampingFactor * delta);
+        velocity.x *= dampingFactor;
+        velocity.z *= dampingFactor;
 
-      // Clamp horizontal velocities to zero if no input is active to prevent drift
-      if (!moveForward && !moveBackward && Math.abs(velocity.z) < 0.1) velocity.z = 0;
-      if (!moveLeft && !moveRight && Math.abs(velocity.x) < 0.1) velocity.x = 0;
+        // Apply gravity if above ground or moving upward
+        if (controls.getObject().position.y > CONFIG.player.height || velocity.y > 0) {
+            velocity.y -= CONFIG.physics.gravity * delta;
+        } else {
+            velocity.y = 0;
+            controls.getObject().position.y = CONFIG.player.height;
+            canJump = true;
+        }
 
-      controls.getObject().translateX(velocity.x * delta);
-      controls.getObject().translateY(velocity.y * delta);
-      controls.getObject().translateZ(velocity.z * delta);
+        // Calculate movement
+        direction.z = Number(moveForward) - Number(moveBackward);
+        direction.x = Number(moveLeft) - Number(moveRight);
+        direction.normalize();
 
-      // Prevent falling below ground level (assume ground at y=10)
-      if (controls.getObject().position.y < 10) {
-        velocity.y = 0;
-        controls.getObject().position.y = 10;
-        canJump = true;
-      }
+        // Apply movement forces
+        if (moveForward || moveBackward) velocity.z -= direction.z * CONFIG.player.speed * delta;
+        if (moveLeft || moveRight) velocity.x -= direction.x * CONFIG.player.speed * delta;
 
-      renderer.render(scene, camera);
-      prevTime = time;
+        // Clamp small velocities to zero
+        if (Math.abs(velocity.x) < CONFIG.physics.minVelocity) velocity.x = 0;
+        if (Math.abs(velocity.z) < CONFIG.physics.minVelocity) velocity.z = 0;
+
+        // Apply movement
+        controls.getObject().translateX(velocity.x * delta);
+        controls.getObject().translateY(velocity.y * delta);
+        controls.getObject().translateZ(velocity.z * delta);
+    }
+
+    function checkPortalCollisions() {
+        if (gameState.isLoading || portalCooldown) return;
+
+        const playerPosition = controls.getObject().position;
+        
+        for (const portal of portals) {
+            const dx = playerPosition.x - portal.position.x;
+            const dz = playerPosition.z - portal.position.z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+            
+            if (distance < CONFIG.portal.radius) {
+                const destination = portal.destination;
+                portalCooldown = true;
+                
+                try {
+                    showPortalTransition(destination);
+                    
+                    setTimeout(() => {
+                        try {
+                            loadWorld(destination);
+                            resetPlayerPosition();
+                        } catch (error) {
+                            console.error('Error during world transition:', error);
+                            loadWorld('default');
+                        } finally {
+                            setTimeout(() => portalCooldown = false, CONFIG.portal.cooldownTime);
+                        }
+                    }, CONFIG.portal.transitionTime);
+                } catch (error) {
+                    console.error('Error in portal transition:', error);
+                    portalCooldown = false;
+                }
+                
+                break;
+            }
+        }
+    }
+
+    function resetPlayerPosition() {
+        controls.getObject().position.set(0, CONFIG.player.height, -20);
+        velocity.set(0, 0, 0);
+    }
+
+    function showLoadingScreen(worldKey) {
+        const loadingOverlay = document.createElement('div');
+        loadingOverlay.id = 'loadingOverlay';
+        loadingOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        `;
+        
+        const loadingText = document.createElement('div');
+        loadingText.style.cssText = `
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+            text-align: center;
+        `;
+        loadingText.innerHTML = `Loading ${worlds[worldKey].name}...<br>Please wait`;
+        
+        loadingOverlay.appendChild(loadingText);
+        document.body.appendChild(loadingOverlay);
+    }
+
+    function hideLoadingScreen() {
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.remove();
+        }
+    }
+
+    function showErrorScreen(message) {
+        const errorOverlay = document.createElement('div');
+        errorOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 0, 0, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        `;
+        
+        const errorText = document.createElement('div');
+        errorText.style.cssText = `
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+        `;
+        errorText.textContent = message;
+        
+        errorOverlay.appendChild(errorText);
+        document.body.appendChild(errorOverlay);
+        
+        setTimeout(() => errorOverlay.remove(), 3000);
+    }
+
+    function onKeyDown(event) {
+        switch(event.code) {
+            case 'ArrowUp':
+            case 'KeyW':
+                moveForward = true;
+                break;
+            case 'ArrowLeft':
+            case 'KeyA':
+                moveLeft = true;
+                break;
+            case 'ArrowDown':
+            case 'KeyS':
+                moveBackward = true;
+                break;
+            case 'ArrowRight':
+            case 'KeyD':
+                moveRight = true;
+                break;
+            case 'Space':
+                if (canJump === true) velocity.y += 350;
+                canJump = false;
+                break;
+        }
+    }
+
+    function onKeyUp(event) {
+        switch(event.code) {
+            case 'ArrowUp':
+            case 'KeyW':
+                moveForward = false;
+                break;
+            case 'ArrowLeft':
+            case 'KeyA':
+                moveLeft = false;
+                break;
+            case 'ArrowDown':
+            case 'KeyS':
+                moveBackward = false;
+                break;
+            case 'ArrowRight':
+            case 'KeyD':
+                moveRight = false;
+                break;
+        }
+    }
+
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function updateParticles(delta) {
+        for (const system of particleSystems) {
+            if (!system.particles) continue;
+            
+            const positions = system.particles.geometry.attributes.position.array;
+            
+            for (let i = 0; i < positions.length / 3; i++) {
+                if (system.type === 'snow') {
+                    updateSnowParticle(positions, i, system.velocities[i], delta);
+                } else if (system.type === 'portal') {
+                    updatePortalParticle(positions, i, system.velocities[i], system.center, delta);
+                }
+            }
+            
+            system.particles.geometry.attributes.position.needsUpdate = true;
+        }
+    }
+
+    function updateSnowParticle(positions, index, velocity, delta) {
+        const idx = index * 3;
+        
+        // Update position
+        positions[idx] += velocity.x;
+        positions[idx + 1] += velocity.y;
+        positions[idx + 2] += velocity.z;
+        
+        // Add some swirling motion
+        const time = performance.now() * 0.001;
+        const swirl = Math.sin(time + velocity.spin) * 0.1;
+        positions[idx] += swirl;
+        positions[idx + 2] += swirl;
+        
+        // Reset if below ground or too far from center
+        const distance = Math.sqrt(
+            positions[idx] * positions[idx] + 
+            positions[idx + 2] * positions[idx + 2]
+        );
+        
+        if (positions[idx + 1] < 0 || distance > 500) {
+            const radius = Math.random() * 500;
+            const theta = Math.random() * Math.PI * 2;
+            
+            positions[idx] = radius * Math.cos(theta);
+            positions[idx + 1] = 200 + Math.random() * 100;
+            positions[idx + 2] = radius * Math.sin(theta);
+        }
+    }
+
+    function updatePortalParticle(positions, index, velocity, center, delta) {
+        const idx = index * 3;
+        
+        // Update angle
+        velocity.angle += velocity.speed;
+        
+        // Calculate new position
+        positions[idx] = Math.cos(velocity.angle) * velocity.radius;
+        positions[idx + 1] += velocity.verticalSpeed;
+        positions[idx + 2] = Math.sin(velocity.angle) * velocity.radius;
+        
+        // Reset height if out of bounds
+        if (positions[idx + 1] < -5 || positions[idx + 1] > 25) {
+            positions[idx + 1] = Math.random() * 30 - 5;
+            velocity.verticalSpeed = -velocity.verticalSpeed;
+        }
+    }
+
+    function updatePortalLabels() {
+        scene.traverse(object => {
+            if (object.userData && object.userData.updateFunction) {
+                object.userData.updateFunction.call(object);
+            }
+        });
+    }
+
+    function showPortalTransition(destination) {
+        // Create a full-screen overlay for the transition
+        const overlay = document.createElement('div');
+        overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = getPortalColorHex(destination);
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.5s ease';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.zIndex = '1000';
+        document.body.appendChild(overlay);
+        
+        // Fade in
+        setTimeout(() => {
+            overlay.style.opacity = '0.8';
+        }, 10);
+        
+        // Fade out and remove
+        setTimeout(() => {
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+                document.body.removeChild(overlay);
+            }, 500);
+        }, 500);
+    }
+
+    function getPortalColor(destination) {
+        switch(destination) {
+            case "default": return 0x2288ff;  // Blue
+            case "forest": return 0x22ff22;   // Green
+            case "desert": return 0xffaa22;   // Orange/amber
+            case "snow": return 0xaaccff;     // Light blue
+            default: return 0xffffff;
+        }
+    }
+
+    function getPortalColorHex(destination) {
+        const color = getPortalColor(destination);
+        return '#' + color.toString(16).padStart(6, '0');
+    }
+
+    function setupWorldObjects(world) {
+        // Add grid
+        const grid = new THREE.GridHelper(2000, 40, world.gridColor, world.gridColor);
+        grid.material.opacity = 0.2;
+        grid.material.transparent = true;
+        scene.add(grid);
+        
+        // Add obstacles
+        if (world.obstacles && world.obstacles.length > 0) {
+            world.obstacles.forEach(obstacle => addObstacle(obstacle));
+        }
+        
+        // Add world-specific elements
+        addWorldSpecificElements(world);
+        
+        // Add portals
+        world.portalPositions.forEach(portalData => {
+            createPortal(portalData.x, portalData.z, portalData.destination);
+        });
+    }
+
+    function setupParticleSystems(world) {
+        if (gameState.currentWorld === "snow" && world.snowfall && world.snowfall.enabled) {
+            addSnowParticles(world.snowfall);
+        }
+    }
+
+    function addObstacle(obstacle) {
+        let geometry, material;
+        
+        // Reuse geometry if possible
+        const geometryKey = `${obstacle.type}-${JSON.stringify(obstacle.size || obstacle.radius || obstacle.height)}`;
+        if (resources.geometries.has(geometryKey)) {
+            geometry = resources.geometries.get(geometryKey);
+        } else {
+            geometry = createObstacleGeometry(obstacle);
+            resources.geometries.set(geometryKey, geometry);
+        }
+        
+        // Reuse material if possible
+        const materialKey = `${obstacle.color}-${obstacle.opacity || 1.0}`;
+        if (resources.materials.has(materialKey)) {
+            material = resources.materials.get(materialKey);
+        } else {
+            material = new THREE.MeshLambertMaterial({ 
+                color: obstacle.color,
+                transparent: obstacle.opacity !== undefined,
+                opacity: obstacle.opacity || 1.0
+            });
+            resources.materials.set(materialKey, material);
+        }
+        
+        const mesh = new THREE.Mesh(geometry, material);
+        
+        // Set position and rotation
+        mesh.position.set(
+            obstacle.position.x + (obstacle.offset?.x || 0), 
+            obstacle.position.y + (obstacle.offset?.y || 0), 
+            obstacle.position.z + (obstacle.offset?.z || 0)
+        );
+        
+        if (obstacle.rotation) {
+            mesh.rotation.set(
+                obstacle.rotation.x || 0, 
+                obstacle.rotation.y || 0, 
+                obstacle.rotation.z || 0
+            );
+        }
+        
+        scene.add(mesh);
+    }
+
+    function createObstacleGeometry(obstacle) {
+        switch(obstacle.type) {
+            case "box":
+                return new THREE.BoxGeometry(
+                    obstacle.size.x, 
+                    obstacle.size.y, 
+                    obstacle.size.z
+                );
+            case "sphere":
+                return new THREE.SphereGeometry(obstacle.radius, 32, 32);
+            case "cylinder":
+                return new THREE.CylinderGeometry(
+                    obstacle.radius, 
+                    obstacle.radius, 
+                    obstacle.height, 
+                    32
+                );
+            case "cone":
+                return new THREE.ConeGeometry(
+                    obstacle.radius,
+                    obstacle.height,
+                    32
+                );
+            default:
+                console.warn("Unknown obstacle type:", obstacle.type);
+                return new THREE.BoxGeometry(1, 1, 1);
+        }
+    }
+
+    function addWorldSpecificElements(world) {
+        switch(gameState.currentWorld) {
+            case "forest":
+                addForestElements(world);
+                break;
+            case "desert":
+                addDesertElements(world);
+                break;
+            case "snow":
+                addSnowElements(world);
+                break;
+        }
+    }
+
+    function addForestElements(world) {
+        if (!world.trees) return;
+        
+        // Create reusable geometries and materials
+        const trunkGeometry = new THREE.CylinderGeometry(3, 5, 1, 8); // Height will be scaled
+        const trunkMaterial = new THREE.MeshLambertMaterial({ color: world.trees.trunkColor });
+        const leafGeometries = [
+            new THREE.ConeGeometry(12, 1, 8),
+            new THREE.ConeGeometry(20, 1, 8),
+            new THREE.ConeGeometry(28, 1, 8)
+        ];
+        const leafMaterial = new THREE.MeshLambertMaterial({ color: world.trees.leavesColor });
+        
+        for (let i = 0; i < world.trees.count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = world.trees.minDistance + 
+                            Math.random() * (world.trees.maxDistance - world.trees.minDistance);
+            
+            const x = Math.cos(angle) * distance;
+            const z = Math.sin(angle) * distance;
+            
+            // Random tree height
+            const height = world.trees.height.min + 
+                          Math.random() * (world.trees.height.max - world.trees.height.min);
+            
+            // Create trunk with scale
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.scale.y = height;
+            trunk.position.set(x, height/2, z);
+            scene.add(trunk);
+            
+            // Create leaves
+            const leavesHeight = height * 0.6;
+            const leavesY = height * 0.8;
+            
+            for (let j = 0; j < 3; j++) {
+                const leaf = new THREE.Mesh(leafGeometries[j], leafMaterial);
+                leaf.scale.y = leavesHeight / 3;
+                leaf.position.set(x, leavesY - j * (leavesHeight/4), z);
+                scene.add(leaf);
+            }
+        }
+    }
+
+    function addDesertElements(world) {
+        if (!world.cacti) return;
+        
+        // Create reusable geometries and materials
+        const bodyGeometry = new THREE.CylinderGeometry(3, 4, 1, 8);
+        const armGeometry = new THREE.CylinderGeometry(2, 2, 1, 8);
+        const cactusMaterial = new THREE.MeshLambertMaterial({ color: world.cacti.color });
+        
+        for (let i = 0; i < world.cacti.count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = world.cacti.minDistance + 
+                            Math.random() * (world.cacti.maxDistance - world.cacti.minDistance);
+            
+            const x = Math.cos(angle) * distance;
+            const z = Math.sin(angle) * distance;
+            
+            const height = world.cacti.height.min + 
+                          Math.random() * (world.cacti.height.max - world.cacti.height.min);
+            
+            // Create body with scale
+            const body = new THREE.Mesh(bodyGeometry, cactusMaterial);
+            body.scale.y = height;
+            body.position.set(x, height/2, z);
+            scene.add(body);
+            
+            // Add arms (50% chance)
+            if (Math.random() > 0.5) {
+                const armHeight = height * 0.3;
+                const armY = height * (0.5 + Math.random() * 0.3);
+                
+                const direction = Math.random() > 0.5 ? 1 : -1;
+                const arm = new THREE.Mesh(armGeometry, cactusMaterial);
+                arm.scale.y = armHeight;
+                arm.position.set(x + direction * 5, armY, z);
+                arm.rotation.z = direction * Math.PI / 4;
+                scene.add(arm);
+            }
+        }
+        
+        // Add sand dunes
+        if (world.dunes) {
+            const duneGeometry = new THREE.BoxGeometry(1, 1, 1);
+            const duneMaterial = new THREE.MeshLambertMaterial({ color: world.dunes.color });
+            
+            for (let i = 0; i < world.dunes.count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const distance = world.dunes.minDistance + 
+                                Math.random() * (world.dunes.maxDistance - world.dunes.minDistance);
+                
+                const x = Math.cos(angle) * distance;
+                const z = Math.sin(angle) * distance;
+                
+                const width = world.dunes.size.min + 
+                              Math.random() * (world.dunes.size.max - world.dunes.size.min);
+                const height = world.dunes.height.min + 
+                              Math.random() * (world.dunes.height.max - world.dunes.height.min);
+                
+                const dune = new THREE.Mesh(duneGeometry, duneMaterial);
+                dune.scale.set(width, height, width);
+                dune.position.set(x, height/2, z);
+                scene.add(dune);
+            }
+        }
+    }
+
+    function addSnowElements(world) {
+        // Add frozen lake
+        if (world.lake) {
+            const lakeGeometry = new THREE.BoxGeometry(
+                world.lake.size.x, 
+                world.lake.size.y, 
+                world.lake.size.z
+            );
+            const lakeMaterial = new THREE.MeshLambertMaterial({ 
+                color: world.lake.color,
+                transparent: true,
+                opacity: world.lake.opacity || 0.7
+            });
+            const lake = new THREE.Mesh(lakeGeometry, lakeMaterial);
+            lake.position.set(
+                world.lake.position.x, 
+                world.lake.position.y, 
+                world.lake.position.z
+            );
+            scene.add(lake);
+        }
+    }
+
+    function addSnowParticles(snowfall) {
+        const snowGeometry = new THREE.BufferGeometry();
+        const snowPositions = new Float32Array(snowfall.particleCount * 3);
+        const snowVelocities = [];
+        
+        // Create positions in a hemisphere above the player
+        for (let i = 0; i < snowfall.particleCount; i++) {
+            const radius = Math.random() * 500;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.random() * Math.PI / 2; // Only in upper hemisphere
+            
+            snowPositions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+            snowPositions[i * 3 + 1] = radius * Math.cos(phi) + 200; // Offset upward
+            snowPositions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+            
+            // More realistic snow movement
+            snowVelocities.push({
+                x: (Math.random() - 0.5) * 0.1,
+                y: -Math.random() * snowfall.speedFactor - 0.1,
+                z: (Math.random() - 0.5) * 0.1,
+                spin: Math.random() * Math.PI * 2
+            });
+        }
+        
+        snowGeometry.setAttribute('position', new THREE.BufferAttribute(snowPositions, 3));
+        
+        const snowMaterial = new THREE.PointsMaterial({
+            color: snowfall.color,
+            size: snowfall.size,
+            transparent: true,
+            opacity: 0.8,
+            map: createSnowflakeTexture(),
+            depthWrite: false
+        });
+        
+        const snowParticles = new THREE.Points(snowGeometry, snowMaterial);
+        scene.add(snowParticles);
+        
+        particleSystems.push({
+            particles: snowParticles,
+            velocities: snowVelocities,
+            type: 'snow'
+        });
+    }
+
+    function createSnowflakeTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const context = canvas.getContext('2d');
+        
+        // Draw snowflake
+        context.fillStyle = '#ffffff';
+        context.beginPath();
+        context.arc(16, 16, 8, 0, Math.PI * 2);
+        context.fill();
+        
+        // Add some sparkle
+        context.globalCompositeOperation = 'lighter';
+        context.beginPath();
+        context.arc(16, 16, 4, 0, Math.PI * 2);
+        context.fill();
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        resources.textures.set('snowflake', texture);
+        return texture;
+    }
+
+    function createPortal(x, z, destination) {
+        // Create portal geometry
+        const portalGeometry = new THREE.CylinderGeometry(10, 10, 30, 32);
+        const portalMaterial = new THREE.MeshLambertMaterial({ 
+            color: getPortalColor(destination),
+            emissive: getPortalColor(destination),
+            emissiveIntensity: 0.5
+        });
+        const portal = new THREE.Mesh(portalGeometry, portalMaterial);
+        portal.position.set(x, 15, z);
+        portal.destination = destination;
+        
+        // Add portal effects
+        addPortalEffects(portal, destination);
+        
+        scene.add(portal);
+        portals.push(portal);
+    }
+
+    function addPortalEffects(portal, destination) {
+        // Add portal label
+        addPortalLabel(portal, destination);
+        
+        // Add particle effect
+        addPortalParticles(portal);
+        
+        // Add glow effect
+        addPortalGlow(portal);
+    }
+
+    function addPortalLabel(portal, destination) {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = 512;
+        canvas.height = 128;
+        
+        // Draw background with gradient
+        const gradient = context.createLinearGradient(0, 0, canvas.width, 0);
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(0.2, 'rgba(0, 0, 0, 0.8)');
+        gradient.addColorStop(0.8, 'rgba(0, 0, 0, 0.8)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw text with outline
+        context.font = 'bold 48px Arial';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        
+        // Draw outline
+        context.strokeStyle = 'black';
+        context.lineWidth = 8;
+        context.strokeText(`To ${worlds[destination].name}`, canvas.width / 2, canvas.height / 2);
+        
+        // Draw text
+        context.fillStyle = 'white';
+        context.fillText(`To ${worlds[destination].name}`, canvas.width / 2, canvas.height / 2);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+        
+        const geometry = new THREE.PlaneGeometry(20, 5);
+        const label = new THREE.Mesh(geometry, material);
+        
+        label.position.copy(portal.position);
+        label.position.y += 25;
+        
+        // Optimize label updates
+        let lastUpdatePos = new THREE.Vector3();
+        const updateThreshold = 1.0;
+        
+        label.userData.updateFunction = function() {
+            if (controls) {
+                const cameraPos = controls.getObject().position;
+                if (cameraPos.distanceTo(lastUpdatePos) > updateThreshold) {
+                    const direction = new THREE.Vector3().subVectors(cameraPos, this.position);
+                    const angle = Math.atan2(direction.x, direction.z);
+                    this.rotation.y = angle;
+                    lastUpdatePos.copy(cameraPos);
+                }
+            }
+        };
+        
+        scene.add(label);
+    }
+
+    function addPortalParticles(portal) {
+        const particleCount = 200;
+        const particles = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const velocities = [];
+        
+        for (let i = 0; i < particleCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 10 + Math.random() * 5;
+            const height = Math.random() * 30 - 5;
+            
+            positions[i * 3] = Math.cos(angle) * radius;
+            positions[i * 3 + 1] = height;
+            positions[i * 3 + 2] = Math.sin(angle) * radius;
+            
+            velocities.push({
+                angle: angle,
+                radius: radius,
+                speed: 0.02 + Math.random() * 0.03,
+                verticalSpeed: (Math.random() - 0.5) * 0.05
+            });
+        }
+        
+        particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        
+        const particleMaterial = new THREE.PointsMaterial({
+            color: portal.material.color,
+            size: 0.5,
+            transparent: true,
+            opacity: 0.6,
+            depthWrite: false
+        });
+        
+        const particleSystem = new THREE.Points(particles, particleMaterial);
+        particleSystem.position.copy(portal.position);
+        scene.add(particleSystem);
+        
+        particleSystems.push({
+            particles: particleSystem,
+            velocities: velocities,
+            type: 'portal',
+            center: portal.position.clone()
+        });
+    }
+
+    function addPortalGlow(portal) {
+        const glowGeometry = new THREE.CylinderGeometry(11, 11, 32, 32);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: portal.material.color,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.BackSide
+        });
+        
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        glow.position.copy(portal.position);
+        scene.add(glow);
+        
+        // Add subtle pulsing animation
+        glow.userData.updateFunction = function() {
+            const time = performance.now() * 0.001;
+            this.scale.set(
+                1 + Math.sin(time * 2) * 0.1,
+                1,
+                1 + Math.sin(time * 2) * 0.1
+            );
+        };
     }
   </script>
 </body>

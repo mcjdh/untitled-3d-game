@@ -1,0 +1,238 @@
+{
+  "tasks": [
+    {
+      "id": "ND-1",
+      "category": "Narrative Design",
+      "description": "Define overall story outline and flow",
+      "status": "todo"
+    },
+    {
+      "id": "ND-2",
+      "category": "Narrative Design",
+      "description": "Write dialog, narration, and instructions for each beat",
+      "status": "todo"
+    },
+    {
+      "id": "ND-3",
+      "category": "Narrative Design",
+      "description": "Identify player objectives, win/lose conditions, and branching (if any)",
+      "status": "todo"
+    },
+    {
+      "id": "GSF-1",
+      "category": "Game Structure & Flow",
+      "description": "Implement a story-state machine (init, beat1, beat2, ..., win, restart)",
+      "status": "todo"
+    },
+    {
+      "id": "GSF-2",
+      "category": "Game Structure & Flow",
+      "description": "Define trigger zones (coordinates and radii) for each story beat",
+      "status": "todo"
+    },
+    {
+      "id": "GSF-3",
+      "category": "Game Structure & Flow",
+      "description": "Create functions to lock/unlock controls and show/hide overlays",
+      "status": "todo"
+    },
+    {
+      "id": "GSF-4",
+      "category": "Game Structure & Flow",
+      "description": "Handle restart logic and reset player state",
+      "status": "todo"
+    },
+    {
+      "id": "EA-1",
+      "category": "Environment & Assets",
+      "description": "Replace the simple GridHelper with custom level geometry or terrain",
+      "status": "todo"
+    },
+    {
+      "id": "EA-2",
+      "category": "Environment & Assets",
+      "description": "Model and import low-poly assets (e.g., a glowing orb, portal, props)",
+      "status": "todo"
+    },
+    {
+      "id": "EA-3",
+      "category": "Environment & Assets",
+      "description": "Unwrap, texture, and UV map all 3D assets",
+      "status": "todo"
+    },
+    {
+      "id": "EA-4",
+      "category": "Environment & Assets",
+      "description": "Position and scale assets to align with trigger zones",
+      "status": "todo"
+    },
+    {
+      "id": "PCM-1",
+      "category": "Player Controls & Mechanics",
+      "description": "Fine-tune camera FOV, movement speed, jump strength, and gravity",
+      "status": "todo"
+    },
+    {
+      "id": "PCM-2",
+      "category": "Player Controls & Mechanics",
+      "description": "Add collision detection with imported level geometry",
+      "status": "todo"
+    },
+    {
+      "id": "PCM-3",
+      "category": "Player Controls & Mechanics",
+      "description": "Optionally add sprint, crouch, or other movement modes",
+      "status": "todo"
+    },
+    {
+      "id": "PCM-4",
+      "category": "Player Controls & Mechanics",
+      "description": "Implement a pause menu and instructions overlay",
+      "status": "todo"
+    },
+    {
+      "id": "UX-1",
+      "category": "UI & User Experience",
+      "description": "Design a responsive story overlay panel (CSS styling + animations)",
+      "status": "todo"
+    },
+    {
+      "id": "UX-2",
+      "category": "UI & User Experience",
+      "description": "Implement click-to-continue logic in the overlay",
+      "status": "todo"
+    },
+    {
+      "id": "UX-3",
+      "category": "UI & User Experience",
+      "description": "Add HUD elements (e.g., objectives list, progress bar)",
+      "status": "todo"
+    },
+    {
+      "id": "UX-4",
+      "category": "UI & User Experience",
+      "description": "Create victory and game-over screens with replay options",
+      "status": "todo"
+    },
+    {
+      "id": "AS-1",
+      "category": "Audio & Sound Effects",
+      "description": "Choose or compose background music",
+      "status": "todo"
+    },
+    {
+      "id": "AS-2",
+      "category": "Audio & Sound Effects",
+      "description": "Add ambient sounds (wind, footsteps, UI clicks)",
+      "status": "todo"
+    },
+    {
+      "id": "AS-3",
+      "category": "Audio & Sound Effects",
+      "description": "Add audio cues for each story event or trigger",
+      "status": "todo"
+    },
+    {
+      "id": "AS-4",
+      "category": "Audio & Sound Effects",
+      "description": "Implement volume controls and audio mixer",
+      "status": "todo"
+    },
+    {
+      "id": "VE-1",
+      "category": "Visual Effects & Polishing",
+      "description": "Add dynamic lighting (spotlights, point lights at triggers)",
+      "status": "todo"
+    },
+    {
+      "id": "VE-2",
+      "category": "Visual Effects & Polishing",
+      "description": "Implement particle effects (e.g., orb glow, portal particles)",
+      "status": "todo"
+    },
+    {
+      "id": "VE-3",
+      "category": "Visual Effects & Polishing",
+      "description": "Apply post-processing (bloom, color grading, tone mapping)",
+      "status": "todo"
+    },
+    {
+      "id": "VE-4",
+      "category": "Visual Effects & Polishing",
+      "description": "Animate UI transitions and typewriter text effects",
+      "status": "todo"
+    },
+    {
+      "id": "PO-1",
+      "category": "Performance & Optimization",
+      "description": "Optimize geometry and textures for web delivery",
+      "status": "todo"
+    },
+    {
+      "id": "PO-2",
+      "category": "Performance & Optimization",
+      "description": "Implement Level-of-Detail (LOD) or lazy-loading for assets",
+      "status": "todo"
+    },
+    {
+      "id": "PO-3",
+      "category": "Performance & Optimization",
+      "description": "Test and maintain stable frame rates on target devices",
+      "status": "todo"
+    },
+    {
+      "id": "PO-4",
+      "category": "Performance & Optimization",
+      "description": "Minify and bundle scripts and assets",
+      "status": "todo"
+    },
+    {
+      "id": "QA-1",
+      "category": "Testing & Quality Assurance",
+      "description": "Test controls and story triggers on desktop and mobile",
+      "status": "todo"
+    },
+    {
+      "id": "QA-2",
+      "category": "Testing & Quality Assurance",
+      "description": "Validate that all trigger zones fire at correct locations",
+      "status": "todo"
+    },
+    {
+      "id": "QA-3",
+      "category": "Testing & Quality Assurance",
+      "description": "Test restart, win, and edge-case scenarios",
+      "status": "todo"
+    },
+    {
+      "id": "QA-4",
+      "category": "Testing & Quality Assurance",
+      "description": "Fix bugs, handle errors, and add user feedback",
+      "status": "todo"
+    },
+    {
+      "id": "DD-1",
+      "category": "Documentation & Deployment",
+      "description": "Write a README with game overview, controls, and setup",
+      "status": "todo"
+    },
+    {
+      "id": "DD-2",
+      "category": "Documentation & Deployment",
+      "description": "Comment and document major code modules and flows",
+      "status": "todo"
+    },
+    {
+      "id": "DD-3",
+      "category": "Documentation & Deployment",
+      "description": "Create a build script or bundler config (e.g., webpack)",
+      "status": "todo"
+    },
+    {
+      "id": "DD-4",
+      "category": "Documentation & Deployment",
+      "description": "Deploy to hosting (e.g., GitHub Pages) and verify online build",
+      "status": "todo"
+    }
+  ]
+} 
