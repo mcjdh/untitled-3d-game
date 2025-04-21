@@ -1,0 +1,4 @@
+build-instructions/
+.cursor/
+.DS_Store
+*.log 
